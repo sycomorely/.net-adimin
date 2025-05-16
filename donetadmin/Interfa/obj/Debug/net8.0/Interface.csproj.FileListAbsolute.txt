@@ -1,0 +1,15 @@
+C:\Users\13567\source\repos\donetadmin\Interfa\bin\Debug\net8.0\Interface.deps.json
+C:\Users\13567\source\repos\donetadmin\Interfa\bin\Debug\net8.0\Interface.dll
+C:\Users\13567\source\repos\donetadmin\Interfa\bin\Debug\net8.0\Interface.pdb
+C:\Users\13567\source\repos\donetadmin\Interfa\obj\Debug\net8.0\Interface.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\13567\source\repos\donetadmin\Interfa\obj\Debug\net8.0\Interface.AssemblyInfoInputs.cache
+C:\Users\13567\source\repos\donetadmin\Interfa\obj\Debug\net8.0\Interface.AssemblyInfo.cs
+C:\Users\13567\source\repos\donetadmin\Interfa\obj\Debug\net8.0\Interface.csproj.CoreCompileInputs.cache
+C:\Users\13567\source\repos\donetadmin\Interfa\obj\Debug\net8.0\Interface.dll
+C:\Users\13567\source\repos\donetadmin\Interfa\obj\Debug\net8.0\refint\Interface.dll
+C:\Users\13567\source\repos\donetadmin\Interfa\obj\Debug\net8.0\Interface.pdb
+C:\Users\13567\source\repos\donetadmin\Interfa\obj\Debug\net8.0\ref\Interface.dll
+C:\Users\13567\source\repos\donetadmin\Interfa\bin\Debug\net8.0\Model.dll
+C:\Users\13567\source\repos\donetadmin\Interfa\bin\Debug\net8.0\Model.pdb
+C:\Users\13567\source\repos\donetadmin\Interfa\obj\Debug\net8.0\Interface.csproj.AssemblyReference.cache
+C:\Users\13567\source\repos\donetadmin\Interfa\obj\Debug\net8.0\Interface.csproj.Up2Date
