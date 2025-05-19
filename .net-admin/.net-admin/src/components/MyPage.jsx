@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Box, 
   Paper, 
@@ -40,7 +40,8 @@ import {
   FormHelperText,
   TablePagination,
   InputAdornment,
-  OutlinedInput
+  OutlinedInput,
+  CircularProgress
 } from '@mui/material';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider, DateCalendar } from '@mui/x-date-pickers';
@@ -63,6 +64,7 @@ import {
   People as PeopleIcon
 } from '@mui/icons-material';
 import { format } from 'date-fns';
+import { userApi, authApi } from '../services/api';
 
 // 导入组件
 import Dashboard from './Dashboard';
@@ -99,9 +101,10 @@ const initialUserData = {
 
 function MyPage({ onLogout }) {
   const [tabValue, setTabValue] = useState(0);
-  const [userData, setUserData] = useState(initialUserData);
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [editMode, setEditMode] = useState(false);
-  const [editedUserData, setEditedUserData] = useState({...userData});
+  const [editedUserData, setEditedUserData] = useState({...initialUserData});
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
@@ -117,12 +120,50 @@ function MyPage({ onLogout }) {
     setTabValue(newValue);
   };
 
+  // 获取用户信息
+  const fetchUserInfo = async () => {
+    try {
+      setLoading(true);
+      const response = await userApi.getUserById('current'); // 获取当前用户信息
+      setUserData(response.data);
+      setEditedUserData(response.data);
+    } catch (error) {
+      setSnackbarMessage('Failed to fetch user information');
+      setSnackbarOpen(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 初始加载时获取用户信息
+  useEffect(() => {
+    fetchUserInfo();
+  }, []);
+
+  // 处理登出
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+      localStorage.removeItem('token');
+      if (onLogout) {
+        onLogout();
+      }
+    } catch (error) {
+      console.error('Logout failed:', error);
+      // 即使登出失败，也清除本地token并执行登出
+      localStorage.removeItem('token');
+      if (onLogout) {
+        onLogout();
+      }
+    }
+  };
+
   // 处理个人信息编辑
   const handleEditToggle = () => {
     setEditMode(!editMode);
     if (editMode) {
       // 取消编辑，恢复原始数据
-      setEditedUserData({...userData});
+      setEditedUserData({...initialUserData});
       setPasswordData({
         currentPassword: '',
         newPassword: '',
@@ -179,7 +220,7 @@ function MyPage({ onLogout }) {
   };
 
   // 处理保存个人信息
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     // 验证密码
     if (passwordData.newPassword && !passwordData.currentPassword) {
       setPasswordError('Current password is required');
@@ -190,28 +231,46 @@ function MyPage({ onLogout }) {
       setPasswordError('Passwords do not match');
       return;
     }
-    
-    // 显示成功消息
-    setSnackbarMessage('Profile updated successfully!');
-    setSnackbarOpen(true);
-    
-    // 退出编辑模式
-    setEditMode(false);
-    
-    // 更新用户数据
-    setUserData({
-      ...userData,
-      name: editedUserData.name,
-      email: editedUserData.email,
-      lastLogin: 'Today at ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-    });
-    
-    // 如果有头像预览，则使用它
-    if (avatarPreview) {
-      setUserData(prev => ({
-        ...prev,
-        avatar: avatarPreview
-      }));
+
+    try {
+      const formData = new FormData();
+      
+      // 添加基本信息
+      formData.append('name', editedUserData.name);
+      formData.append('email', editedUserData.email);
+      
+      // 如果有密码更改
+      if (passwordData.newPassword) {
+        formData.append('currentPassword', passwordData.currentPassword);
+        formData.append('newPassword', passwordData.newPassword);
+      }
+      
+      // 如果有头像文件
+      if (avatarFile) {
+        formData.append('avatar', avatarFile);
+      }
+
+      const response = await userApi.updateUser('current', formData);
+      
+      // 更新用户数据
+      setUserData(response.data);
+      setEditMode(false);
+      
+      // 重置密码和头像状态
+      setPasswordData({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+      setPasswordError('');
+      setAvatarFile(null);
+      
+      // 显示成功消息
+      setSnackbarMessage('Profile updated successfully!');
+      setSnackbarOpen(true);
+    } catch (error) {
+      setSnackbarMessage(error.response?.data?.message || 'Failed to update profile');
+      setSnackbarOpen(true);
     }
   };
 
@@ -274,7 +333,7 @@ function MyPage({ onLogout }) {
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                       />
                     ) : (
-                      userData.avatar
+                      userData?.avatar
                     )}
                     <Box 
                       sx={{ 
@@ -328,16 +387,16 @@ function MyPage({ onLogout }) {
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                     />
                   ) : (
-                    userData.avatar
+                    userData?.avatar
                   )}
                 </Box>
               )}
               
               <Typography variant="h6" sx={{ mt: 1, textAlign: 'center' }}>
-                {editMode ? editedUserData.name : userData.name}
+                {editMode ? editedUserData.name : userData?.name}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
-                {userData.role}
+                {userData?.role}
               </Typography>
             </Grid>
             
@@ -357,7 +416,7 @@ function MyPage({ onLogout }) {
                       size="small"
                     />
                   ) : (
-                    <Typography variant="body1">{userData.name}</Typography>
+                    <Typography variant="body1">{userData?.name}</Typography>
                   )}
                 </Grid>
                 
@@ -375,7 +434,7 @@ function MyPage({ onLogout }) {
                       size="small"
                     />
                   ) : (
-                    <Typography variant="body1">{userData.email}</Typography>
+                    <Typography variant="body1">{userData?.email}</Typography>
                   )}
                 </Grid>
                 
@@ -383,14 +442,14 @@ function MyPage({ onLogout }) {
                   <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                     Join Date
                   </Typography>
-                  <Typography variant="body1">{userData.joinDate}</Typography>
+                  <Typography variant="body1">{userData?.joinDate}</Typography>
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
                   <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                     Last Login
                   </Typography>
-                  <Typography variant="body1">{userData.lastLogin}</Typography>
+                  <Typography variant="body1">{userData?.lastLogin}</Typography>
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
@@ -566,7 +625,7 @@ function MyPage({ onLogout }) {
                 <Button 
                   variant="outlined" 
                   color="primary" 
-                  onClick={onLogout}
+                  onClick={handleLogout}
                   startIcon={<ExitToAppIcon />}
                   size="small"
                 >
@@ -588,11 +647,24 @@ function MyPage({ onLogout }) {
               overflow: 'hidden',
             }}
           >
-            {tabValue === 0 && <Dashboard />}
-            {tabValue === 1 && <MenuList />}
-            {tabValue === 2 && <RoleList />}
-            {tabValue === 3 && <UserList />}
-            {tabValue === 4 && renderMyInfo()}
+            {loading ? (
+              <Box sx={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                alignItems: 'center', 
+                minHeight: '100vh' 
+              }}>
+                <CircularProgress />
+              </Box>
+            ) : (
+              <>
+                {tabValue === 0 && <Dashboard />}
+                {tabValue === 1 && <MenuList />}
+                {tabValue === 2 && <RoleList />}
+                {tabValue === 3 && <UserList />}
+                {tabValue === 4 && renderMyInfo()}
+              </>
+            )}
           </Paper>
         </Box>
       </Box>

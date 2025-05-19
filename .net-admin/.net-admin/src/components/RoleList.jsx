@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Box, 
   Paper, 
@@ -39,6 +39,7 @@ import {
   Search as SearchIcon,
   FilterList as FilterListIcon
 } from '@mui/icons-material';
+import { roleApi } from '../services/api';
 
 // 初始角色数据
 const initialRoles = [
@@ -80,7 +81,8 @@ const initialRoles = [
 ];
 
 function RoleList() {
-  const [roles, setRoles] = useState(initialRoles);
+  const [roles, setRoles] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [roleDialogOpen, setRoleDialogOpen] = useState(false);
   const [editingRole, setEditingRole] = useState(null);
   const [roleFormData, setRoleFormData] = useState({
@@ -98,6 +100,28 @@ function RoleList() {
   const [filterEnabled, setFilterEnabled] = useState('all');
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+
+  // 获取角色列表
+  const fetchRoles = async () => {
+    try {
+      setLoading(true);
+      const response = await roleApi.getRoles({
+        search: searchTerm,
+        status: filterEnabled === 'all' ? undefined : filterEnabled === 'enabled'
+      });
+      setRoles(response.data);
+    } catch (error) {
+      setSnackbarMessage('Failed to fetch roles');
+      setSnackbarOpen(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 初始加载和搜索/过滤条件变化时获取角色列表
+  useEffect(() => {
+    fetchRoles();
+  }, [searchTerm, filterEnabled]);
 
   // 处理角色操作菜单
   const handleRoleMenuClick = (event, id) => {
@@ -141,22 +165,33 @@ function RoleList() {
   };
 
   // 删除角色
-  const handleDeleteRole = () => {
-    setRoles(roles.filter(role => role.id !== selectedRoleId));
-    setSnackbarMessage('Role deleted successfully!');
-    setSnackbarOpen(true);
+  const handleDeleteRole = async () => {
+    try {
+      await roleApi.deleteRole(selectedRoleId);
+      setRoles(roles.filter(role => role.id !== selectedRoleId));
+      setSnackbarMessage('Role deleted successfully!');
+      setSnackbarOpen(true);
+    } catch (error) {
+      setSnackbarMessage('Failed to delete role');
+      setSnackbarOpen(true);
+    }
     handleRoleMenuClose();
   };
 
   // 切换角色启用状态
-  const handleToggleRoleStatus = (id) => {
-    setRoles(roles.map(role => 
-      role.id === id ? { ...role, isEnabled: !role.isEnabled } : role
-    ));
-    
-    const role = roles.find(role => role.id === id);
-    setSnackbarMessage(`Role ${role.name} ${!role.isEnabled ? 'enabled' : 'disabled'} successfully!`);
-    setSnackbarOpen(true);
+  const handleToggleRoleStatus = async (id) => {
+    try {
+      const role = roles.find(role => role.id === id);
+      await roleApi.toggleRoleStatus(id, !role.isEnabled);
+      setRoles(roles.map(role => 
+        role.id === id ? { ...role, isEnabled: !role.isEnabled } : role
+      ));
+      setSnackbarMessage(`Role ${role.name} ${!role.isEnabled ? 'enabled' : 'disabled'} successfully!`);
+      setSnackbarOpen(true);
+    } catch (error) {
+      setSnackbarMessage('Failed to update role status');
+      setSnackbarOpen(true);
+    }
   };
 
   // 处理表单变更
@@ -182,7 +217,7 @@ function RoleList() {
   };
 
   // 保存角色
-  const handleSaveRole = () => {
+  const handleSaveRole = async () => {
     // 验证表单
     const errors = {};
     if (!roleFormData.name.trim()) {
@@ -200,35 +235,36 @@ function RoleList() {
       return;
     }
 
-    if (editingRole) {
-      // 更新现有角色
-      setRoles(roles.map(role => 
-        role.id === editingRole.id 
-          ? { 
-              ...role, 
-              name: roleFormData.name,
-              rank: Number(roleFormData.rank),
-              description: roleFormData.description,
-              isEnabled: roleFormData.isEnabled
-            } 
-          : role
-      ));
-      setSnackbarMessage('Role updated successfully!');
-    } else {
-      // 添加新角色
-      const newRole = {
-        id: Math.max(...roles.map(role => role.id), 0) + 1,
-        name: roleFormData.name,
-        rank: Number(roleFormData.rank),
-        description: roleFormData.description,
-        isEnabled: roleFormData.isEnabled
-      };
-      setRoles([...roles, newRole]);
-      setSnackbarMessage('Role added successfully!');
+    try {
+      if (editingRole) {
+        // 更新现有角色
+        const response = await roleApi.updateRole(editingRole.id, {
+          name: roleFormData.name,
+          rank: Number(roleFormData.rank),
+          description: roleFormData.description,
+          isEnabled: roleFormData.isEnabled
+        });
+        setRoles(roles.map(role => 
+          role.id === editingRole.id ? response.data : role
+        ));
+        setSnackbarMessage('Role updated successfully!');
+      } else {
+        // 添加新角色
+        const response = await roleApi.createRole({
+          name: roleFormData.name,
+          rank: Number(roleFormData.rank),
+          description: roleFormData.description,
+          isEnabled: roleFormData.isEnabled
+        });
+        setRoles([...roles, response.data]);
+        setSnackbarMessage('Role added successfully!');
+      }
+      setSnackbarOpen(true);
+      setRoleDialogOpen(false);
+    } catch (error) {
+      setSnackbarMessage(error.response?.data?.message || 'Failed to save role');
+      setSnackbarOpen(true);
     }
-    
-    setSnackbarOpen(true);
-    setRoleDialogOpen(false);
   };
 
   // 处理搜索

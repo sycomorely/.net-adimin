@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Box, 
   Paper, 
@@ -41,6 +41,7 @@ import {
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon
 } from '@mui/icons-material';
+import { userApi } from '../services/api';
 
 // 初始用户数据
 const initialUsers = [
@@ -87,7 +88,8 @@ const initialUsers = [
 ];
 
 function UserList() {
-  const [users, setUsers] = useState(initialUsers);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [userFormData, setUserFormData] = useState({
@@ -107,6 +109,28 @@ function UserList() {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  // 获取用户列表
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      const response = await userApi.getUsers({
+        search: searchTerm,
+        status: filterEnabled === 'all' ? undefined : filterEnabled === 'enabled'
+      });
+      setUsers(response.data);
+    } catch (error) {
+      setSnackbarMessage('Failed to fetch users');
+      setSnackbarOpen(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 初始加载和搜索/过滤条件变化时获取用户列表
+  useEffect(() => {
+    fetchUsers();
+  }, [searchTerm, filterEnabled]);
 
   // 处理用户操作菜单
   const handleUserMenuClick = (event, id) => {
@@ -152,22 +176,33 @@ function UserList() {
   };
 
   // 删除用户
-  const handleDeleteUser = () => {
-    setUsers(users.filter(user => user.id !== selectedUserId));
-    setSnackbarMessage('User deleted successfully!');
-    setSnackbarOpen(true);
+  const handleDeleteUser = async () => {
+    try {
+      await userApi.deleteUser(selectedUserId);
+      setUsers(users.filter(user => user.id !== selectedUserId));
+      setSnackbarMessage('User deleted successfully!');
+      setSnackbarOpen(true);
+    } catch (error) {
+      setSnackbarMessage('Failed to delete user');
+      setSnackbarOpen(true);
+    }
     handleUserMenuClose();
   };
 
   // 切换用户启用状态
-  const handleToggleUserStatus = (id) => {
-    setUsers(users.map(user => 
-      user.id === id ? { ...user, isEnabled: !user.isEnabled } : user
-    ));
-    
-    const user = users.find(user => user.id === id);
-    setSnackbarMessage(`User ${user.username} ${!user.isEnabled ? 'enabled' : 'disabled'} successfully!`);
-    setSnackbarOpen(true);
+  const handleToggleUserStatus = async (id) => {
+    try {
+      const user = users.find(user => user.id === id);
+      await userApi.toggleUserStatus(id, !user.isEnabled);
+      setUsers(users.map(user => 
+        user.id === id ? { ...user, isEnabled: !user.isEnabled } : user
+      ));
+      setSnackbarMessage(`User ${user.username} ${!user.isEnabled ? 'enabled' : 'disabled'} successfully!`);
+      setSnackbarOpen(true);
+    } catch (error) {
+      setSnackbarMessage('Failed to update user status');
+      setSnackbarOpen(true);
+    }
   };
 
   // 处理表单变更
@@ -194,7 +229,7 @@ function UserList() {
   };
 
   // 保存用户
-  const handleSaveUser = () => {
+  const handleSaveUser = async () => {
     // 验证表单
     const errors = {};
     if (!userFormData.username.trim()) {
@@ -215,38 +250,39 @@ function UserList() {
       return;
     }
 
-    if (editingUser) {
-      // 更新现有用户
-      setUsers(users.map(user => 
-        user.id === editingUser.id 
-          ? { 
-              ...user, 
-              username: userFormData.username,
-              name: userFormData.name,
-              password: userFormData.password || user.password,
-              description: userFormData.description,
-              isEnabled: userFormData.isEnabled
-            } 
-          : user
-      ));
-      setSnackbarMessage('User updated successfully!');
-    } else {
-      // 添加新用户
-      const newUser = {
-        id: Math.max(...users.map(user => user.id), 0) + 1,
-        username: userFormData.username,
-        name: userFormData.name,
-        password: userFormData.password,
-        description: userFormData.description,
-        isEnabled: userFormData.isEnabled
-      };
-      setUsers([...users, newUser]);
-      setSnackbarMessage('User added successfully!');
+    try {
+      if (editingUser) {
+        // 更新现有用户
+        const response = await userApi.updateUser(editingUser.id, {
+          username: userFormData.username,
+          name: userFormData.name,
+          password: userFormData.password || undefined,
+          description: userFormData.description,
+          isEnabled: userFormData.isEnabled
+        });
+        setUsers(users.map(user => 
+          user.id === editingUser.id ? response.data : user
+        ));
+        setSnackbarMessage('User updated successfully!');
+      } else {
+        // 添加新用户
+        const response = await userApi.createUser({
+          username: userFormData.username,
+          name: userFormData.name,
+          password: userFormData.password,
+          description: userFormData.description,
+          isEnabled: userFormData.isEnabled
+        });
+        setUsers([...users, response.data]);
+        setSnackbarMessage('User added successfully!');
+      }
+      setSnackbarOpen(true);
+      setUserDialogOpen(false);
+      setShowPassword(false);
+    } catch (error) {
+      setSnackbarMessage(error.response?.data?.message || 'Failed to save user');
+      setSnackbarOpen(true);
     }
-    
-    setSnackbarOpen(true);
-    setUserDialogOpen(false);
-    setShowPassword(false);
   };
 
   // 处理搜索

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Box, 
   Paper, 
@@ -39,6 +39,7 @@ import {
   Search as SearchIcon,
   FilterList as FilterListIcon
 } from '@mui/icons-material';
+import { menuApi } from '../services/api';
 
 // 初始菜单数据
 const initialMenuItems = [
@@ -85,7 +86,8 @@ const initialMenuItems = [
 ];
 
 function MenuList() {
-  const [menuItems, setMenuItems] = useState(initialMenuItems);
+  const [menuItems, setMenuItems] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [menuDialogOpen, setMenuDialogOpen] = useState(false);
   const [editingMenu, setEditingMenu] = useState(null);
   const [menuFormData, setMenuFormData] = useState({
@@ -106,6 +108,28 @@ function MenuList() {
   const [filterEnabled, setFilterEnabled] = useState('all');
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+
+  // 获取菜单列表
+  const fetchMenus = async () => {
+    try {
+      setLoading(true);
+      const response = await menuApi.getMenus({
+        search: searchTerm,
+        status: filterEnabled === 'all' ? undefined : filterEnabled === 'enabled'
+      });
+      setMenuItems(response.data);
+    } catch (error) {
+      setSnackbarMessage('Failed to fetch menus');
+      setSnackbarOpen(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 初始加载和搜索/过滤条件变化时获取菜单列表
+  useEffect(() => {
+    fetchMenus();
+  }, [searchTerm, filterEnabled]);
 
   // 处理菜单操作
   const handleMenuClick = (event, id) => {
@@ -150,10 +174,16 @@ function MenuList() {
     handleMenuClose();
   };
 
-  const handleDeleteMenu = () => {
-    setMenuItems(prev => prev.filter(item => item.id !== selectedMenuId));
-    setSnackbarMessage('Menu deleted successfully!');
-    setSnackbarOpen(true);
+  const handleDeleteMenu = async () => {
+    try {
+      await menuApi.deleteMenu(selectedMenuId);
+      setMenuItems(prev => prev.filter(item => item.id !== selectedMenuId));
+      setSnackbarMessage('Menu deleted successfully!');
+      setSnackbarOpen(true);
+    } catch (error) {
+      setSnackbarMessage('Failed to delete menu');
+      setSnackbarOpen(true);
+    }
     handleMenuClose();
   };
 
@@ -205,62 +235,69 @@ function MenuList() {
     return errors;
   };
 
-  const handleSaveMenu = () => {
+  const handleSaveMenu = async () => {
     const errors = validateMenuForm();
     
     if (Object.keys(errors).length > 0) {
       setMenuFormErrors(errors);
       return;
     }
-    
-    if (editingMenu) {
-      // Update existing menu
-      setMenuItems(prev => 
-        prev.map(item => 
-          item.id === editingMenu.id 
-            ? { 
-                ...item, 
-                name: menuFormData.name,
-                path: menuFormData.path,
-                component: menuFormData.component,
-                rank: Number(menuFormData.rank),
-                isEnabled: menuFormData.isEnabled,
-                description: menuFormData.description,
-                parent: menuFormData.parent || null
-              } 
-            : item
-        )
-      );
-      setSnackbarMessage('Menu updated successfully!');
-    } else {
-      // Add new menu
-      const newMenu = {
-        id: Date.now(),
-        name: menuFormData.name,
-        path: menuFormData.path,
-        component: menuFormData.component,
-        rank: Number(menuFormData.rank),
-        isEnabled: menuFormData.isEnabled,
-        description: menuFormData.description,
-        parent: menuFormData.parent || null
-      };
-      
-      setMenuItems(prev => [...prev, newMenu]);
-      setSnackbarMessage('Menu added successfully!');
+
+    try {
+      if (editingMenu) {
+        // 更新现有菜单
+        const response = await menuApi.updateMenu(editingMenu.id, {
+          name: menuFormData.name,
+          path: menuFormData.path,
+          component: menuFormData.component,
+          rank: Number(menuFormData.rank),
+          isEnabled: menuFormData.isEnabled,
+          description: menuFormData.description,
+          parent: menuFormData.parent || null
+        });
+        setMenuItems(prev => 
+          prev.map(item => 
+            item.id === editingMenu.id ? response.data : item
+          )
+        );
+        setSnackbarMessage('Menu updated successfully!');
+      } else {
+        // 添加新菜单
+        const response = await menuApi.createMenu({
+          name: menuFormData.name,
+          path: menuFormData.path,
+          component: menuFormData.component,
+          rank: Number(menuFormData.rank),
+          isEnabled: menuFormData.isEnabled,
+          description: menuFormData.description,
+          parent: menuFormData.parent || null
+        });
+        setMenuItems(prev => [...prev, response.data]);
+        setSnackbarMessage('Menu added successfully!');
+      }
+      setSnackbarOpen(true);
+      setMenuDialogOpen(false);
+    } catch (error) {
+      setSnackbarMessage(error.response?.data?.message || 'Failed to save menu');
+      setSnackbarOpen(true);
     }
-    
-    setSnackbarOpen(true);
-    setMenuDialogOpen(false);
   };
 
-  const handleToggleEnabled = (id) => {
-    setMenuItems(prev => 
-      prev.map(item => 
-        item.id === id 
-          ? { ...item, isEnabled: !item.isEnabled } 
-          : item
-      )
-    );
+  const handleToggleEnabled = async (id) => {
+    try {
+      const menu = menuItems.find(item => item.id === id);
+      await menuApi.toggleMenuStatus(id, !menu.isEnabled);
+      setMenuItems(prev => 
+        prev.map(item => 
+          item.id === id ? { ...item, isEnabled: !item.isEnabled } : item
+        )
+      );
+      setSnackbarMessage(`Menu ${menu.name} ${!menu.isEnabled ? 'enabled' : 'disabled'} successfully!`);
+      setSnackbarOpen(true);
+    } catch (error) {
+      setSnackbarMessage('Failed to update menu status');
+      setSnackbarOpen(true);
+    }
   };
 
   const handleChangePage = (event, newPage) => {

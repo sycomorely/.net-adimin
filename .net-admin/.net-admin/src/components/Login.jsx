@@ -21,6 +21,7 @@ import {
   Person as PersonIcon
 } from '@mui/icons-material'
 import '../styles/Background.css'
+import { authApi } from '../services/api'
 
 // 创建黑绿主题
 const darkGreenTheme = createTheme({
@@ -45,6 +46,7 @@ function Login({ onLoginSuccess }) {
   const [error, setError] = useState('')
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [windowSize, setWindowSize] = useState({
     width: window.innerWidth,
     height: window.innerHeight
@@ -72,18 +74,13 @@ function Login({ onLoginSuccess }) {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // 硬编码的用户数据
-  const validUser = {
-    username: 'admin',
-    password: '123456'
-  }
-
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault()
     
     // 重置错误状态
     setUsernameError(false)
     setPasswordError(false)
+    setError('')
     
     // 验证表单
     let hasError = false;
@@ -100,16 +97,25 @@ function Login({ onLoginSuccess }) {
     if (hasError) {
       return;
     }
-    
-    if (username === validUser.username && password === validUser.password) {
+
+    try {
+      setLoading(true)
+      const response = await authApi.login({ username, password })
+      
+      // 保存token到localStorage
+      if (response.data?.token) {
+        localStorage.setItem('token', response.data.token)
+      }
+      
       setIsLoggedIn(true)
-      setError('')
       // 调用父组件传递的回调函数
       if (onLoginSuccess) {
-        onLoginSuccess();
+        onLoginSuccess(response.data);
       }
-    } else {
-      setError('Invalid username or password')
+    } catch (err) {
+      setError(err.response?.data?.message || 'Invalid username or password')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -297,8 +303,9 @@ function Login({ onLoginSuccess }) {
               fullWidth
               variant="contained"
               sx={{ mt: 3, mb: 2 }}
+              disabled={loading}
             >
-              Login
+              {loading ? 'Logging in...' : 'Login'}
             </Button>
           </Box>
         </Paper>
